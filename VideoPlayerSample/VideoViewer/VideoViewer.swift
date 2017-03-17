@@ -22,69 +22,56 @@ class VideoViewer: UIViewController, VIMVideoPlayerViewDelegate, UIGestureRecogn
     @IBOutlet weak var controlBottomSpacing: NSLayoutConstraint!
     @IBOutlet weak var bottomControlView: UIView!
     
-    weak var superDelegate: VIMVideoPlayerViewDelegate?
-    weak var superView: UIView!
-    weak var senderView: VIMVideoPlayerView!
+    private(set) weak var superDelegate: VIMVideoPlayerViewDelegate?
+    private(set) weak var senderView: VIMVideoPlayerView!
+    private(set) weak var superView: UIView!
     private(set) weak var rootViewController: UIViewController!
-    var statusBarStyle: UIStatusBarStyle!
-    var originalFrameRelativeToScreen: CGRect!
-    var originalFrame: CGRect!
-    var sliderValueChanging: Bool = false
-    var willPlay: Bool = false
-    var panOrigin: CGPoint = CGPoint(x: 0, y: 0)
-    var panGesture: UIPanGestureRecognizer!
-    var isAnimating: Bool = false
+    
+    private(set) var originalFrameRelativeToScreen: CGRect!
+    private(set) var originalFrame: CGRect!
+    private(set) var sliderValueChanging: Bool = false
+    private(set) var willPlay: Bool = false
+    private(set) var panOrigin: CGPoint = CGPoint(x: 0, y: 0)
+    private(set) var panGesture: UIPanGestureRecognizer!
+    private(set) var isAnimating: Bool = false
+    
+    init(videoPlayerView: VIMVideoPlayerView!, view: UIView!, delegate: VIMVideoPlayerViewDelegate?) {
+        super.init(nibName: "VideoViewer", bundle: nil)
+        
+        self.superDelegate = delegate
+        self.senderView = videoPlayerView
+        self.superView = view
+    }
+    
+    required init?(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
     
     override func viewDidLoad() {
         super.viewDidLoad()
 
         // Do any additional setup after loading the view.
         do {
-//            try AVAudioSession.sharedInstance().setCategory(AVAudioSessionCategoryPlayback, withOptions: .MixWithOthers)
+            try AVAudioSession.sharedInstance().setCategory(AVAudioSessionCategoryPlayback, with: .mixWithOthers)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             
         }
 
+        // UI
+        self.view.frame = UIScreen.main.bounds
         self.view.backgroundColor = UIColor.clear
         self.backgroundView.backgroundColor = UIColor.black
         self.backgroundView.alpha = 0.0
-        self.hiddenShowVideoControllerView(hidden: true)
         
-        self.statusBarStyle = UIApplication.shared.statusBarStyle
         let windowBounds = UIScreen.main.bounds
-
-        originalFrame = senderView.frame
+        self.originalFrame = senderView.frame
         var newFrame = senderView.convert(windowBounds, to: nil)
         newFrame.origin = CGPoint(x: newFrame.origin.x, y: newFrame.origin.y)
         newFrame.size = senderView.frame.size
-        originalFrameRelativeToScreen = newFrame
-        senderView.frame = originalFrameRelativeToScreen
-        self.view.insertSubview(senderView, at: 1)
-        
-        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(self.toggleShowVideoControllerView))
-        self.videoControllerView.addGestureRecognizer(tapGesture)
-        self.videoControllerView.isUserInteractionEnabled = true
-        
-        self.senderView.delegate = self
-        if let duration = self.senderView.player.player.currentItem?.duration {
-            let durationInSeconds = Int(Float(CMTimeGetSeconds(duration)))
-            
-            let seconds: Int = durationInSeconds % 60
-            let minutes: Int = (durationInSeconds / 60) % 60
-            totalTimeLabel.text = String(format: "%02d:%02d", minutes, seconds)
-        }
-        
-//        seekSlider.addTarget(self, action: #selector(self.sliderTouchDownAction(_:)), for: .TouchDown)
-//        seekSlider.addTarget(self, action: #selector(self.sliderTouchUpAction(_:)), for: .TouchUpInside)
-//        seekSlider.addTarget(self, action: #selector(self.sliderTouchUpAction(_:)), for: .TouchUpOutside)
-//        
-//        NotificationCenter.defaultCenter.addObserver(self, selector: #selector(self.didRotate(_:)), name: UIDeviceOrientationDidChangeNotification, object: nil)
-        
-        panGesture = UIPanGestureRecognizer(target: self, action: #selector(self.gestureRecognizerDidPan))
-        panGesture.cancelsTouchesInView = false
-        panGesture.delegate = self
-        self.view.addGestureRecognizer(panGesture)
+        self.originalFrameRelativeToScreen = newFrame
+        self.senderView.frame = self.originalFrameRelativeToScreen
+        self.view.insertSubview(self.senderView, at: 1)
         
         totalTimeLabel.layer.shadowColor = UIColor.black.cgColor
         totalTimeLabel.layer.shadowOffset = CGSize(width: 0, height: 0)
@@ -102,6 +89,34 @@ class VideoViewer: UIViewController, VIMVideoPlayerViewDelegate, UIGestureRecogn
         seekSlider.layer.shadowOpacity = 0.5
         
         playPauseButton.setImage(UIImage(named: "videoBtnPauseSmall"), for: .normal)
+        
+        // Action
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(self.toggleShowVideoControllerView))
+        self.videoControllerView.addGestureRecognizer(tapGesture)
+        self.videoControllerView.isUserInteractionEnabled = true
+        
+        panGesture = UIPanGestureRecognizer(target: self, action: #selector(self.gestureRecognizerDidPan))
+        panGesture.cancelsTouchesInView = false
+        panGesture.delegate = self
+        self.view.addGestureRecognizer(panGesture)
+        
+        seekSlider.addTarget(self, action: #selector(self.sliderTouchDownAction(sender:)), for: .touchDown)
+        seekSlider.addTarget(self, action: #selector(self.sliderTouchUpAction(sender:)), for: .touchUpInside)
+        seekSlider.addTarget(self, action: #selector(self.sliderTouchUpAction(sender:)), for: .touchUpOutside)
+
+        NotificationCenter.default.addObserver(self, selector: #selector(self.didRotate(notification:)), name: NSNotification.Name.UIDeviceOrientationDidChange, object: nil)
+        
+        // Duration
+        if let duration = self.senderView.player.player.currentItem?.duration {
+            let durationInSeconds = Int(Float(CMTimeGetSeconds(duration)))
+            
+            let seconds: Int = durationInSeconds % 60
+            let minutes: Int = (durationInSeconds / 60) % 60
+            totalTimeLabel.text = String(format: "%02d:%02d", minutes, seconds)
+        }
+        
+        self.senderView.delegate = self
+        self.toggleVideoControllerView(hidden: true)
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -115,46 +130,12 @@ class VideoViewer: UIViewController, VIMVideoPlayerViewDelegate, UIGestureRecogn
         }
     }
     
-    // MARK: Gesture recognizer
-    func gestureRecognizerShouldBegin(gestureRecognizer: UIGestureRecognizer) -> Bool {
-        let panGestureRecognizer = gestureRecognizer as! UIPanGestureRecognizer
-        let translation = panGestureRecognizer.translation(in: self.view)
-        return fabs(translation.y) > fabs(translation.x)
+    override func didReceiveMemoryWarning() {
+        super.didReceiveMemoryWarning()
+        // Dispose of any resources that can be recreated.
     }
     
-    func gestureRecognizer(gestureRecognizer: UIGestureRecognizer, shouldReceiveTouch touch: UITouch) -> Bool {
-        self.panOrigin = senderView.frame.origin
-        gestureRecognizer.isEnabled = true
-        return true
-    }
-    
-    func gestureRecognizer(gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWithGestureRecognizer otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        if gestureRecognizer == panGesture {
-            return true
-        }
-        return false
-    }
-    
-    func gestureRecognizerDidPan(panGesture: UIPanGestureRecognizer) {
-        self.hiddenShowVideoControllerView(hidden: true)
-        let windowSize = backgroundView.bounds.size
-        let currentPoint = panGesture.translation(in: self.view)
-        let y: CGFloat = currentPoint.y + panOrigin.y
-        var frame = senderView.frame
-        frame.origin.y = y
-        self.senderView.frame = frame
-        let yDiff: CGFloat = abs((y + senderView.frame.size.height / 2) - windowSize.height / 2)
-        self.backgroundView.alpha = max(1 - yDiff / (windowSize.height / 0.5), kMinBlackMaskAlpha)
-        if (panGesture.state == .ended || panGesture.state == .cancelled) {
-            if backgroundView.alpha < 0.95 {
-                self.dismissViewController()
-            }
-            else {
-                self.rollbackViewController()
-            }
-        }
-    }
-    
+    //MARK: Private Method
     func didRotate(notification: NSNotification) {
         self.adjustViewFrame()
     }
@@ -183,9 +164,26 @@ class VideoViewer: UIViewController, VIMVideoPlayerViewDelegate, UIGestureRecogn
         return newRect.integral
     }
     
-    override func didReceiveMemoryWarning() {
-        super.didReceiveMemoryWarning()
-        // Dispose of any resources that can be recreated.
+    func animateHiddenControlView() {
+        UIView.animate(withDuration: 0.3) {
+            self.toggleVideoControllerView(hidden: true)
+        }
+    }
+    
+    func toggleShowVideoControllerView() {
+        UIView.animate(withDuration: 0.3) {
+            self.toggleVideoControllerView(hidden: self.closeButton.alpha != 0)
+        }
+    }
+    
+    func toggleVideoControllerView(hidden: Bool) {
+        self.closeButton.alpha = hidden ? 0.0 : 1.0
+        self.bottomControlView.alpha = hidden ? 0.0 : 1.0
+        
+        if !hidden {
+            NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(self.animateHiddenControlView), object: nil)
+            self.perform(#selector(self.animateHiddenControlView), with: nil, afterDelay: 3.0)
+        }
     }
     
     func presentFromRootViewController() {
@@ -199,28 +197,6 @@ class VideoViewer: UIViewController, VIMVideoPlayerViewDelegate, UIGestureRecogn
         UIApplication.shared.keyWindow?.addSubview(self.view)
         viewController.addChildViewController(self)
         self.didMove(toParentViewController: viewController)
-    }
-    
-    func animateHiddenControlView() {
-        UIView.animate(withDuration: 0.3) {
-            self.hiddenShowVideoControllerView(hidden: true)
-        }
-    }
-    
-    func toggleShowVideoControllerView() {
-        UIView.animate(withDuration: 0.3) {
-            self.hiddenShowVideoControllerView(hidden: self.closeButton.alpha != 0)
-        }
-    }
-    
-    func hiddenShowVideoControllerView(hidden: Bool) {
-        self.closeButton.alpha = hidden ? 0.0 : 1.0
-        self.bottomControlView.alpha = hidden ? 0.0 : 1.0
-        
-        if !hidden {
-            NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(self.animateHiddenControlView), object: nil)
-            self.perform(#selector(self.animateHiddenControlView), with: nil, afterDelay: 3.0)
-        }
     }
     
     func rollbackViewController() {
@@ -238,12 +214,6 @@ class VideoViewer: UIViewController, VIMVideoPlayerViewDelegate, UIGestureRecogn
     }
     
     func dismissViewController() {
-//        if self.senderView.player.isPlaying == false {
-//            if let cell = superDelegate as? HPSVideoPlayerView {
-//                cell.stopVideoPlayer()
-//            }
-//        }
-        
         self.senderView.player.isMuted = true
         UIApplication.shared.setStatusBarHidden(false, with: .fade)
         if UIDeviceOrientationIsLandscape(UIDevice.current.orientation) {
@@ -257,7 +227,7 @@ class VideoViewer: UIViewController, VIMVideoPlayerViewDelegate, UIGestureRecogn
             self.senderView.setVideoFillMode(AVLayerVideoGravityResizeAspectFill)
             self.senderView.frame = self.originalFrameRelativeToScreen
             self.backgroundView.alpha = 0.0
-            self.hiddenShowVideoControllerView(hidden: true)
+            self.toggleVideoControllerView(hidden: true)
         }) { (finished: Bool) in
             if finished {
                 self.senderView.frame = self.originalFrame
@@ -266,17 +236,18 @@ class VideoViewer: UIViewController, VIMVideoPlayerViewDelegate, UIGestureRecogn
                 self.view.removeFromSuperview()
                 self.removeFromParentViewController()
                 
-//                DispatchQueue.global(DispatchQueue.GlobalQueuePriority.default, 0).asynchronously() {
-//                    do {
-//                        try AVAudioSession.sharedInstance().setCategory(AVAudioSessionCategoryPlayback, with: .mixWithOthers)
-//                    } catch {
-//                        
-//                    }
-//                }
+                DispatchQueue.main.async {
+                    do {
+                        try AVAudioSession.sharedInstance().setCategory(AVAudioSessionCategoryPlayback, with: .mixWithOthers)
+                    } catch {
+                        
+                    }
+                }
             }
         }
     }
     
+    //MARK: Button actions
     @IBAction func closeButtonAction(sender: AnyObject) {
         self.dismissViewController()
     }
@@ -291,7 +262,17 @@ class VideoViewer: UIViewController, VIMVideoPlayerViewDelegate, UIGestureRecogn
         }
     }
     
-    // MARK: slider action
+    //MARK: Slider actions
+    @IBAction func sliderValueChangedAction(sender: AnyObject) {
+        guard let duration = self.senderView.player.player.currentItem?.duration else {
+            return
+        }
+        
+        let slider = sender as! UISlider
+        let seekTime = Float(CMTimeGetSeconds(duration)) * slider.value
+        self.senderView.player.seek(toTime: seekTime)
+    }
+    
     func sliderTouchDownAction(sender: AnyObject) {
         sliderValueChanging = true
         if self.senderView.player.isPlaying {
@@ -309,18 +290,48 @@ class VideoViewer: UIViewController, VIMVideoPlayerViewDelegate, UIGestureRecogn
         }
     }
     
-    @IBAction func sliderValueChangedAction(sender: AnyObject) {
-        guard let duration = self.senderView.player.player.currentItem?.duration else {
-            return
-        }
-        
-        let slider = sender as! UISlider
-        let seekTime = Float(CMTimeGetSeconds(duration)) * slider.value
-        self.senderView.player.seek(toTime: seekTime)
+    //MARK: Gesture recognizer
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        let panGestureRecognizer = gestureRecognizer as! UIPanGestureRecognizer
+        let translation = panGestureRecognizer.translation(in: self.view)
+        return fabs(translation.y) > fabs(translation.x)
     }
     
-    // MARK: VIMVideoPlayerViewDelegate
-    func videoPlayerView(videoPlayerView: VIMVideoPlayerView!, timeDidChange cmTime: CMTime) {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        self.panOrigin = senderView.frame.origin
+        gestureRecognizer.isEnabled = true
+        return true
+    }
+    
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer == panGesture {
+            return true
+        }
+        return false
+    }
+    
+    func gestureRecognizerDidPan(panGesture: UIPanGestureRecognizer) {
+        self.toggleVideoControllerView(hidden: true)
+        let windowSize = backgroundView.bounds.size
+        let currentPoint = panGesture.translation(in: self.view)
+        let y: CGFloat = currentPoint.y + panOrigin.y
+        var frame = senderView.frame
+        frame.origin.y = y
+        self.senderView.frame = frame
+        let yDiff: CGFloat = abs((y + senderView.frame.size.height / 2) - windowSize.height / 2)
+        self.backgroundView.alpha = max(1 - yDiff / (windowSize.height / 0.5), kMinBlackMaskAlpha)
+        if (panGesture.state == .ended || panGesture.state == .cancelled) {
+            if backgroundView.alpha < 0.95 {
+                self.dismissViewController()
+            }
+            else {
+                self.rollbackViewController()
+            }
+        }
+    }
+    
+    //MARK: VIMVideoPlayerViewDelegate
+    func videoPlayerView(_ videoPlayerView: VIMVideoPlayerView!, timeDidChange cmTime: CMTime) {
         guard let duration = self.senderView.player.player.currentItem?.duration else {
             return
         }
@@ -338,21 +349,7 @@ class VideoViewer: UIViewController, VIMVideoPlayerViewDelegate, UIGestureRecogn
         playTimeLabel.text = String(format: "%02d:%02d", minutes, seconds)
     }
     
-    func videoPlayerViewDidReachEnd(videoPlayerView: VIMVideoPlayerView!) {
+    func videoPlayerViewDidReachEnd(_ videoPlayerView: VIMVideoPlayerView!) {
         dismissViewController()
-//        if let cell = superDelegate as? HPSVideoPlayerView {
-//            cell.videoPlayerViewDidReachEnd(videoPlayerView)
-//        }
     }
-        
-    /*
-    // MARK: - Navigation
-
-    // In a storyboard-based application, you will often want to do a little preparation before navigation
-    override func prepareForSegue(segue: UIStoryboardSegue, sender: AnyObject?) {
-        // Get the new view controller using segue.destinationViewController.
-        // Pass the selected object to the new view controller.
-    }
-    */
-
 }
