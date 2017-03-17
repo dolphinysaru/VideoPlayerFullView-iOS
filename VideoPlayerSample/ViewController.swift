@@ -12,6 +12,7 @@ import VIMVideoPlayer
 class ViewController: UIViewController, VIMVideoPlayerViewDelegate {
     
     var videoPlayerView: VIMVideoPlayerView!
+    var videoViewer: VideoViewer?
     var videoURL = URL(string: "https://prefetch-video-sample.storage.googleapis.com/gbike.mp4")
     
     override func viewDidLoad() {
@@ -23,7 +24,7 @@ class ViewController: UIViewController, VIMVideoPlayerViewDelegate {
         self.videoPlayerView = VIMVideoPlayerView()
         self.videoPlayerView.backgroundColor = UIColor.black
         self.videoPlayerView.frame = CGRect(x: 0, y: 50, width: width, height: height)
-        self.videoPlayerView.player.isLooping = true
+        self.videoPlayerView.player.isLooping = false
         self.videoPlayerView.player.isMuted = true
         self.videoPlayerView.player.disableAirplay()
         self.videoPlayerView.setVideoFillMode(AVLayerVideoGravityResizeAspectFill)
@@ -44,7 +45,12 @@ class ViewController: UIViewController, VIMVideoPlayerViewDelegate {
     }
 
     func didTap() {
+        if self.videoViewer != nil {
+            self.videoViewer = nil
+        }
         
+        self.videoViewer = VideoViewer(videoPlayerView: self.videoPlayerView, view: self.view, delegate: self)
+        self.videoViewer?.presentFromRootViewController()
     }
     
     // MARK: VIMVideoPlayerViewDelegate
